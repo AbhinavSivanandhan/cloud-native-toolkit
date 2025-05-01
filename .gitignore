@@ -1,0 +1,17 @@
+# General
+*.pyc
+__pycache__/
+*.zip
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Python
+.env
+*.egg-info/
+
+# VS Code / macOS / Editor junk
+.vscode/
+.DS_Store
