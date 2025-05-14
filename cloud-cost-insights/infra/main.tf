@@ -60,14 +60,20 @@ data "archive_file" "lambda_zip" {
 }
 
 resource "aws_lambda_function" "cost_insights" {
-  function_name = var.project_name
-  handler       = "app.lambda_handler"
-  runtime       = "python3.9"
-  filename      = data.archive_file.lambda_zip.output_path
+  function_name    = var.project_name
+  handler          = "app.lambda_handler"
+  runtime          = "python3.9"
+  filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = filebase64sha256(data.archive_file.lambda_zip.output_path)
-  role          = aws_iam_role.lambda_exec_role.arn
-  timeout       = var.lambda_timeout
-  memory_size   = var.lambda_memory_size
+  role             = aws_iam_role.lambda_exec_role.arn
+  timeout          = var.lambda_timeout
+  memory_size      = var.lambda_memory_size
+
+  environment {
+    variables = {
+      DEFAULT_LOOKBACK_DAYS = "3"
+    }
+  }
 
   tags = local.common_tags
 }

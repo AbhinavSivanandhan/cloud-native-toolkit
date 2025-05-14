@@ -15,3 +15,6 @@ __pycache__/
 # VS Code / macOS / Editor junk
 .vscode/
 .DS_Store
+
+#Contains endpoint/resource info for Dashboard Ops, don't commit it
+api_info.json

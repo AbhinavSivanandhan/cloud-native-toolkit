@@ -1,5 +1,6 @@
 deploy:
 	cd infra && terraform apply -auto-approve
+	terraform -chdir=infra output -json > ../dashboards/cost_insights_ui/api_info.json
 
 destroy:
 	cd infra && terraform destroy -auto-approve
