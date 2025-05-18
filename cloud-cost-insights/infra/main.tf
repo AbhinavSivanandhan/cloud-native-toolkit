@@ -46,10 +46,24 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "logs:PutLogEvents"
         ],
         Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:ListBucket"
+        ],
+        Resource = "arn:aws:s3:::${aws_s3_bucket.cost_cache.bucket}"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ],
+        Resource = "arn:aws:s3:::${aws_s3_bucket.cost_cache.bucket}/*"
       }
     ]
   })
-
   # IAM Role Policies don’t support tags (skip it)
 }
 
@@ -57,6 +71,12 @@ data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "${path.module}/lambda"
   output_path = "${path.module}/lambda.zip"
+}
+
+resource "aws_s3_bucket" "cost_cache" {
+  bucket = "${var.project_name}-cost-cache"
+
+  tags = local.common_tags
 }
 
 resource "aws_lambda_function" "cost_insights" {
@@ -72,6 +92,7 @@ resource "aws_lambda_function" "cost_insights" {
   environment {
     variables = {
       DEFAULT_LOOKBACK_DAYS = "3"
+      CACHE_BUCKET_NAME     = aws_s3_bucket.cost_cache.bucket
     }
   }
 

@@ -1,9 +1,27 @@
 import boto3
 import os
 import json
-from datetime import datetime, timedelta
+import hashlib
+from datetime import datetime, timedelta, timezone
 
 ce = boto3.client("ce")
+s3 = boto3.client("s3")
+
+CACHE_BUCKET = os.environ.get("CACHE_BUCKET_NAME")
+CACHE_TTL = int(os.environ.get("CACHE_TTL_MINUTES", "30"))  # cache expiry in minutes
+
+def generate_cache_key(start, end, granularity, service=None):
+    base_key = f"{start}_{end}_{granularity}"
+    if service:
+        base_key += f"_svc_{service}"
+    hash_digest = hashlib.md5(base_key.encode()).hexdigest()
+    return f"cost_cache/{hash_digest}.json"
+
+def is_cache_valid(obj):
+    last_modified = obj["LastModified"]
+    now = datetime.now(timezone.utc)
+    age_minutes = (now - last_modified).total_seconds() / 60
+    return age_minutes < CACHE_TTL
 
 def lambda_handler(event, context):
     print("Received event:", json.dumps(event))
@@ -30,7 +48,24 @@ def lambda_handler(event, context):
     granularity = body.get("granularity", "DAILY")
     filter_service = body.get("service")
 
-    # Construct optional filter
+    cache_key = generate_cache_key(start, end, granularity, filter_service)
+
+    # Try loading cache
+    if CACHE_BUCKET:
+        try:
+            obj = s3.get_object(Bucket=CACHE_BUCKET, Key=cache_key)
+            if is_cache_valid(obj):
+                print(f"Serving from cache: {cache_key}")
+                return {
+                    "statusCode": 200,
+                    "body": obj["Body"].read().decode("utf-8")
+                }
+            else:
+                print("Cache expired, refetching.")
+        except s3.exceptions.NoSuchKey:
+            print(f"No cache found for key: {cache_key}")
+
+    # Build filter if needed, optional filter
     filter_block = None
     if filter_service:
         filter_block = {
@@ -64,15 +99,30 @@ def lambda_handler(event, context):
                     "cost": f"${float(cost):.2f}"
                 })
 
+        payload = {
+            "message": "Cost data fetched",
+            "start": start,
+            "end": end,
+            "granularity": granularity,
+            "results": results
+        }
+
+        # Save to cache
+        if CACHE_BUCKET:
+            try:
+                s3.put_object(
+                    Bucket=CACHE_BUCKET,
+                    Key=cache_key,
+                    Body=json.dumps(payload),
+                    ContentType="application/json"
+                )
+                print(f"Cached response to {cache_key}")
+            except Exception as e:
+                print(f"Failed to cache: {e}")
+
         return {
             "statusCode": 200,
-            "body": json.dumps({
-                "message": "Cost data fetched",
-                "start": start,
-                "end": end,
-                "granularity": granularity,
-                "results": results
-            })
+            "body": json.dumps(payload)
         }
 
     except Exception as e:
