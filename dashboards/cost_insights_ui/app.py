@@ -35,7 +35,8 @@ if st.sidebar.button("Fetch Costs"):
     if not endpoint:
         st.error("API endpoint missing. Please deploy infrastructure.")
     else:
-        st.info("Fetching cost data...")
+        status_msg = st.empty()
+        status_msg.info("Fetching cost data...")
 
         payload = {
             "start": start_date.isoformat(),
@@ -48,6 +49,9 @@ if st.sidebar.button("Fetch Costs"):
             response = requests.post(endpoint, json=payload, timeout=15)
             data = response.json()
 
+            # Clear "Fetching..." message
+            status_msg.empty()
+
             if "results" not in data:
                 st.error(f"API Error: {data}")
             elif not data["results"]:
@@ -55,7 +59,6 @@ if st.sidebar.button("Fetch Costs"):
             else:
                 results = pd.DataFrame(data["results"])
 
-                # Handle edge cases where cost is missing or not formatted
                 if "cost" not in results.columns:
                     st.error("Missing 'cost' in results. Check Lambda logic.")
                 else:
@@ -63,6 +66,10 @@ if st.sidebar.button("Fetch Costs"):
 
                     st.success(f"Data loaded for {len(results)} entries")
                     st.dataframe(results)
+
+                    # Display source info if available
+                    source = data.get("source", "unknown").capitalize()
+                    st.markdown(f"🔄 **Data source**: *{source}*")
 
                     st.subheader("📈 Cost Trends Over Time")
                     trend_chart = results.pivot_table(index="date", columns="service", values="cost", aggfunc="sum").fillna(0)
@@ -73,4 +80,5 @@ if st.sidebar.button("Fetch Costs"):
                     st.bar_chart(breakdown)
 
         except Exception as e:
+            status_msg.empty()
             st.exception(f"Failed to fetch or process data: {e}")

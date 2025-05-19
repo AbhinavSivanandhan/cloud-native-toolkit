@@ -56,6 +56,8 @@ def lambda_handler(event, context):
     results = []
     uncached_days = []
 
+    all_cached = True
+
     # Try loading cached data per day
     for day in daterange(start_date, end_date):
         key = cache_key_for(day, granularity, filter_service)
@@ -71,51 +73,67 @@ def lambda_handler(event, context):
                     print(f"Expired cache: {key}")
             except s3.exceptions.NoSuchKey:
                 print(f"No cache: {key}")
+        all_cached = False
         uncached_days.append(day)
 
+    # If fully cached, return here
+    if all_cached:
+        print("Entire range served from cache.")
+        return {
+            "statusCode": 200,
+            "body": json.dumps({
+                "message": "Cost data fetched",
+                "start": start_str,
+                "end": end_str,
+                "granularity": granularity,
+                "results": results,
+                "source": "cache"
+            })
+        }
+
     # Fetch fresh data for uncached days
-    if uncached_days:
-        for day in uncached_days:
-            day_str = day.isoformat()
-            try:
-                response = ce.get_cost_and_usage(
-                    TimePeriod={"Start": day_str, "End": (day + timedelta(days=1)).isoformat()}, #adding 1 day only when checking single day ranges
-                    Granularity=granularity,
-                    Metrics=["UnblendedCost"],
-                    GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
-                    **({"Filter": {
-                        "Dimensions": {
-                            "Key": "SERVICE",
-                            "Values": [filter_service]
-                        }
-                    }} if filter_service else {})
+    for day in uncached_days:
+        day_str = day.isoformat()
+        try:
+            response = ce.get_cost_and_usage(
+                TimePeriod={"Start": day_str, "End": (day + timedelta(days=1)).isoformat()},
+                Granularity=granularity,
+                Metrics=["UnblendedCost"],
+                GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
+                **({"Filter": {
+                    "Dimensions": {
+                        "Key": "SERVICE",
+                        "Values": [filter_service]
+                    }
+                }} if filter_service else {})
+            )
+
+            daily_results = []
+            for group in response["ResultsByTime"][0].get("Groups", []):
+                service = group["Keys"][0]
+                cost = group["Metrics"]["UnblendedCost"]["Amount"]
+                daily_results.append({
+                    "date": day_str,
+                    "service": service,
+                    "cost": f"${float(cost):.2f}"
+                })
+
+            results.extend(daily_results)
+
+            # Cache it
+            if CACHE_BUCKET:
+                s3.put_object(
+                    Bucket=CACHE_BUCKET,
+                    Key=cache_key_for(day, granularity, filter_service),
+                    Body=json.dumps(daily_results),
+                    ContentType="application/json"
                 )
+                print(f"Cached: {cache_key_for(day, granularity, filter_service)}")
 
-                daily_results = []
-                for group in response["ResultsByTime"][0].get("Groups", []):
-                    service = group["Keys"][0]
-                    cost = group["Metrics"]["UnblendedCost"]["Amount"]
-                    daily_results.append({
-                        "date": day_str,
-                        "service": service,
-                        "cost": f"${float(cost):.2f}"
-                    })
+        except Exception as e:
+            print(f"Error fetching data for {day_str}: {e}")
 
-                results.extend(daily_results)
-
-                # Cache it
-                if CACHE_BUCKET:
-                    s3.put_object(
-                        Bucket=CACHE_BUCKET,
-                        Key=cache_key_for(day, granularity, filter_service),
-                        Body=json.dumps(daily_results),
-                        ContentType="application/json"
-                    )
-                    print(f"Cached: {cache_key_for(day, granularity, filter_service)}")
-
-            except Exception as e:
-                print(f"Error fetching data for {day_str}: {e}")
-
+    # Return combined results with source marked as fresh
     return {
         "statusCode": 200,
         "body": json.dumps({
@@ -123,6 +141,7 @@ def lambda_handler(event, context):
             "start": start_str,
             "end": end_str,
             "granularity": granularity,
-            "results": results
+            "results": results,
+            "source": "fresh"
         })
     }
