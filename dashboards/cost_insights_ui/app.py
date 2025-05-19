@@ -28,6 +28,7 @@ st.sidebar.header("Query Parameters")
 start_date = st.sidebar.date_input("Start Date", value=date(2025, 4, 1))
 end_date = st.sidebar.date_input("End Date", value=date(2025, 4, 30))
 granularity = st.sidebar.selectbox("Granularity", ["DAILY", "MONTHLY"])
+ignore_cache = st.sidebar.checkbox("Bypass Cache (force fresh data)", value=False)
 
 # Fetch and display data
 if st.sidebar.button("Fetch Costs"):
@@ -39,31 +40,37 @@ if st.sidebar.button("Fetch Costs"):
         payload = {
             "start": start_date.isoformat(),
             "end": end_date.isoformat(),
-            "granularity": granularity
+            "granularity": granularity,
+            "ignore_cache": ignore_cache
         }
 
         try:
-            response = requests.post(endpoint, json=payload, timeout=10)
+            response = requests.post(endpoint, json=payload, timeout=15)
             data = response.json()
 
             if "results" not in data:
                 st.error(f"API Error: {data}")
+            elif not data["results"]:
+                st.warning("No results returned for the selected range.")
             else:
                 results = pd.DataFrame(data["results"])
-                results["cost"] = results["cost"].str.replace("$", "").astype(float)
 
-                st.success(f"Data loaded for {len(results)} entries")
-                st.dataframe(results)
+                # Handle edge cases where cost is missing or not formatted
+                if "cost" not in results.columns:
+                    st.error("Missing 'cost' in results. Check Lambda logic.")
+                else:
+                    results["cost"] = results["cost"].str.replace("$", "").astype(float)
 
-                # Line chart by date
-                st.subheader("📈 Cost Trends Over Time")
-                trend_chart = results.pivot_table(index="date", columns="service", values="cost", aggfunc="sum").fillna(0)
-                st.line_chart(trend_chart)
+                    st.success(f"Data loaded for {len(results)} entries")
+                    st.dataframe(results)
 
-                # Bar chart of total cost per service
-                st.subheader("💸 Total Cost Breakdown by Service")
-                breakdown = results.groupby("service")["cost"].sum().sort_values(ascending=False)
-                st.bar_chart(breakdown)
+                    st.subheader("📈 Cost Trends Over Time")
+                    trend_chart = results.pivot_table(index="date", columns="service", values="cost", aggfunc="sum").fillna(0)
+                    st.line_chart(trend_chart)
+
+                    st.subheader("💸 Total Cost Breakdown by Service")
+                    breakdown = results.groupby("service")["cost"].sum().sort_values(ascending=False)
+                    st.bar_chart(breakdown)
 
         except Exception as e:
-            st.error(f"Failed to fetch or process data: {e}")
+            st.exception(f"Failed to fetch or process data: {e}")
