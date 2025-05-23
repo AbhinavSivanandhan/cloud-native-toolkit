@@ -67,10 +67,18 @@ resource "aws_iam_role_policy" "lambda_policy" {
   # IAM Role Policies don’t support tags (skip it)
 }
 
-data "archive_file" "lambda_zip" {
+# For cost_insights
+data "archive_file" "lambda_zip_cost" {
   type        = "zip"
   source_dir  = "${path.module}/lambda"
-  output_path = "${path.module}/lambda.zip"
+  output_path = "${path.module}/lambda_cost.zip"
+}
+
+# For cache_prewarm
+data "archive_file" "lambda_zip_prewarm" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda"
+  output_path = "${path.module}/lambda_prewarm.zip"
 }
 
 resource "aws_s3_bucket" "cost_cache" {
@@ -83,8 +91,8 @@ resource "aws_lambda_function" "cost_insights" {
   function_name    = var.project_name
   handler          = "app.lambda_handler"
   runtime          = "python3.9"
-  filename         = data.archive_file.lambda_zip.output_path
-  source_code_hash = filebase64sha256(data.archive_file.lambda_zip.output_path)
+  filename         = data.archive_file.lambda_zip_cost.output_path
+  source_code_hash = filebase64sha256(data.archive_file.lambda_zip_cost.output_path)
   role             = aws_iam_role.lambda_exec_role.arn
   timeout          = var.lambda_timeout
   memory_size      = var.lambda_memory_size
@@ -142,4 +150,45 @@ resource "aws_lambda_permission" "allow_apigw" {
   function_name = aws_lambda_function.cost_insights.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_function" "cache_prewarm" {
+  filename         = data.archive_file.lambda_zip_prewarm.output_path
+  function_name    = "cloud-cost-prewarm"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "prewarm.lambda_handler"
+  runtime          = "python3.9"
+  source_code_hash = filebase64sha256(data.archive_file.lambda_zip_prewarm.output_path)
+
+  environment {
+    variables = {
+      CACHE_BUCKET_NAME     = aws_s3_bucket.cost_cache.bucket
+      CACHE_TTL_MINUTES     = "1440"  # 1 day default
+    }
+  }
+
+  tags = {
+    Name      = "CostInsightsPrewarm"
+    ManagedBy = "Terraform"
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "daily_prewarm" {
+  name        = "daily-cost-prewarm"
+  description = "Triggers daily cache prewarm for cost insights"
+  schedule_expression = "cron(0 3 * * ? *)" # Every day at 3AM UTC
+}
+
+resource "aws_cloudwatch_event_target" "invoke_prewarm" {
+  rule      = aws_cloudwatch_event_rule.daily_prewarm.name
+  target_id = "lambda"
+  arn       = aws_lambda_function.cache_prewarm.arn
+}
+
+resource "aws_lambda_permission" "allow_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.cache_prewarm.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.daily_prewarm.arn
 }
