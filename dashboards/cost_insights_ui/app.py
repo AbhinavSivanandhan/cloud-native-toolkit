@@ -45,7 +45,7 @@ else:
     aws_services = default_services
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["💰 Cost Insights", "🧹 Resource Scanner", "🧠 AI Risk & Cost Summary","🛡️ Security Insights"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["💰 Cost Insights", "🧹 Resource Scanner", "🧠 AI Risk & Cost Summary", "🛡️ Security Insights", "🤖 Infra Autopilot", "📊 Governance Copilot"])
 
 # ------------------------------------------
 # TAB 1: COST INSIGHTS
@@ -235,4 +235,60 @@ with tab4:
 
                 except Exception as e:
                     st.error("Failed to run security guard agent.")
+                    st.exception(e)
+
+# ------------------------------------------
+# TAB 5: INFRA AUTOPILOT
+# ------------------------------------------
+with tab5:
+    st.subheader("🤖 Infra Autopilot Agent")
+    st.markdown("Scans AWS CloudWatch logs and suggests idle or underused infra you can pause.")
+
+    if st.button("Run Infra Autopilot"):
+        with st.spinner("Reading logs + Generating recommendations..."):
+            try:
+                import sys
+                root_path = Path(__file__).resolve().parent.parent.parent
+                sys.path.append(str(root_path))
+                from agents.infra_autopilot import generate_autopilot_summary
+                summaries = generate_autopilot_summary()
+
+                if not summaries:
+                    st.info("✅ No clear idle patterns detected.")
+                else:
+                    for group, advice in summaries:
+                        st.markdown(f"### 🔍 `{group}`")
+                        st.markdown(advice)
+
+            except Exception as e:
+                st.error("Autopilot Agent failed.")
+                st.exception(e)
+
+# ------------------------------------------
+# TAB 6: GOVERNANCE COPILOT
+# ------------------------------------------
+with tab6:
+    st.subheader("📊 Governance Copilot")
+    st.markdown("Analyze EC2 configurations for tagging, modularity, duplication, and Terraform best practices.")
+
+    governance_endpoint = ""
+    try:
+        if api_file.exists():
+            api_data = json.loads(api_file.read_text())
+            api_base_url = api_data["api_endpoint"]["value"]
+            governance_endpoint = f"{api_base_url}/governance-copilot"
+    except Exception as e:
+        st.warning(f"Could not parse API endpoint: {e}")
+
+    if st.button("Run Governance Check"):
+        if not governance_endpoint:
+            st.error("Missing API URL.")
+        else:
+            with st.spinner("Analyzing infrastructure..."):
+                try:
+                    resp = requests.post(governance_endpoint, json={}, timeout=30)
+                    data = resp.json()
+                    st.code(data.get("terraform", "No Terraform code returned."), language="hcl")
+                except Exception as e:
+                    st.error("Failed to run Governance Copilot.")
                     st.exception(e)

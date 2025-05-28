@@ -71,3 +71,43 @@ resource "aws_iam_role_policy" "lambda_policy" {
   })
 }
 
+resource "aws_iam_policy" "governance_copilot_policy" {
+  name   = "governance-copilot-policy"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid    = "EC2Access",
+        Effect = "Allow",
+        Action = [
+          "ec2:DescribeInstances",
+          "ec2:DescribeTags",
+          "ec2:DescribeSecurityGroups"
+        ],
+        Resource = "*"
+      },
+      {
+        Sid    = "IAMAccess",
+        Effect = "Allow",
+        Action = [
+          "iam:ListRoles"
+        ],
+        Resource = "*"
+      },
+      {
+        Sid    = "S3Access",
+        Effect = "Allow",
+        Action = [
+          "s3:ListAllMyBuckets",
+          "s3:GetBucketTagging"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "governance_copilot_attach" {
+  role       = aws_iam_role.lambda_exec_role.name
+  policy_arn = aws_iam_policy.governance_copilot_policy.arn
+}
