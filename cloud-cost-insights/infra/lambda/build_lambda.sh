@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 rm -rf build lambda_security.zip
 
 # Install dependencies
-pip install -r requirements.txt -t build/
+python3 -m pip install -r requirements.txt -t build/
 
 # Add your source code
 cp security_guard.py build/
