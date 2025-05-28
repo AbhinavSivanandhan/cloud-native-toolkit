@@ -45,7 +45,7 @@ else:
     aws_services = default_services
 
 # Tabs
-tab1, tab2 = st.tabs(["💰 Cost Insights", "🧹 Resource Scanner"])
+tab1, tab2, tab3, tab4 = st.tabs(["💰 Cost Insights", "🧹 Resource Scanner", "🧠 AI Risk & Cost Summary","🛡️ Security Insights"])
 
 # ------------------------------------------
 # TAB 1: COST INSIGHTS
@@ -158,4 +158,81 @@ with tab2:
                         st.dataframe(pd.DataFrame(orphaned_data["unused_network_interfaces"]))
                 except Exception as e:
                     st.error("Failed to fetch orphaned resource data")
+                    st.exception(e)
+# ------------------------------------------
+# TAB 3: AI Risk & Cost Summary
+# ------------------------------------------
+with tab3:
+    st.subheader("🧠 AI-Powered Infra + Cost Summary")
+    st.markdown("This agent summarizes risks, anomalies, and cost insights using your live AWS data.")
+
+    if st.button("Run Inventory Agent"):
+        with st.spinner("Querying AWS + Generating Sonar Summary..."):
+            try:
+                import sys
+                import os
+                root_path = Path(__file__).resolve().parent.parent.parent  # safely go up to root
+                sys.path.append(str(root_path))
+                from agents.inventory_guard import summarize_inventory
+                result = summarize_inventory()
+
+                st.success("Summary generated!")
+                st.markdown("### 🔍 Summary")
+                st.markdown(result["summary"])
+
+                with st.expander("📦 Raw AWS Inventory"):
+                    st.json(result["raw"], expanded=False)
+
+            except Exception as e:
+                st.error("Agent failed to run")
+                st.exception(e)
+# ------------------------------------------
+# TAB 4: SECURITY INSIGHTS
+# ------------------------------------------
+with tab4:
+    st.subheader("🛡️ Security Insights Agent")
+    st.markdown("Detect risky configurations in IAM, S3, and network exposure.")
+
+    # Derive endpoint
+    security_endpoint = ""
+    try:
+        if api_file.exists():
+            api_data = json.loads(api_file.read_text())
+            api_base_url = api_data["api_endpoint"]["value"]
+            security_endpoint = f"{api_base_url}/security-guard"
+    except Exception as e:
+        st.warning(f"Could not parse API endpoint: {e}")
+
+    if st.button("Run Security Check"):
+        if not security_endpoint:
+            st.error("Security Guard API endpoint not found.")
+        else:
+            with st.spinner("Scanning AWS config for vulnerabilities..."):
+                try:
+                    sec_response = requests.post(security_endpoint, json={}, timeout=20)
+                    sec_data = sec_response.json()
+
+                    st.success("Security insights generated!")
+                    # st.markdown("### 🔍 Full API Raw Response")
+                    # st.json(sec_data)
+                    if "summary" in sec_data:
+                        st.markdown("### 🔍 AI Summary")
+                        st.markdown(sec_data["summary"])
+                    else:
+                        st.warning("No AI summary returned. See raw response above.")
+
+                    if sec_data.get("public_s3_buckets"):
+                        st.warning(f"📂 Public S3 Buckets: {len(sec_data['public_s3_buckets'])}")
+                        st.dataframe(pd.DataFrame(sec_data["public_s3_buckets"], columns=["BucketName"]))
+
+                    if sec_data.get("open_security_groups"):
+                        st.error("🚨 Open Security Groups Detected")
+                        st.dataframe(pd.DataFrame(sec_data["open_security_groups"]))
+
+                    if sec_data.get("risky_iam_users"):
+                        st.warning("⚠️ IAM Users Without MFA or Admin Overexposure")
+                        st.dataframe(pd.DataFrame(sec_data["risky_iam_users"], columns=["IAM Username"]))
+
+                except Exception as e:
+                    st.error("Failed to run security guard agent.")
                     st.exception(e)

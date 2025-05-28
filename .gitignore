@@ -1,20 +1,91 @@
+# -------------------
 # General
+# -------------------
 *.pyc
 __pycache__/
 *.zip
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
 
+# -------------------
 # Terraform
+# -------------------
 .terraform/
 *.tfstate
 *.tfstate.backup
+*.tfvars
+!*.tfvars.sample
 
+# -------------------
 # Python
+# -------------------
 .env
+.venv/
 *.egg-info/
+dist/
+build/
+*.pyo
+*.pyd
+*.cover
+coverage.*
+.cache
+.tox/
+.pytest_cache/
+.pyre/
 
-# VS Code / macOS / Editor junk
-.vscode/
+# -------------------
+# Node / JavaScript
+# -------------------
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# -------------------
+# macOS
+# -------------------
 .DS_Store
 
-#Contains endpoint/resource info for Dashboard Ops, don't commit it
+# -------------------
+# Editor/IDE
+# -------------------
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# -------------------
+# Bytecode and C extensions
+# -------------------
+*.so
+*.dylib
+
+# -------------------
+# Project-Specific
+# -------------------
+
+# Contains endpoint/resource info for Dashboard Ops, don't commit it
 api_info.json
+
+# Out/generated data
+out.json
+services_cache.json
+services_cleaned*.json
+
+# Lambda build outputs
+cloud-cost-insights/infra/lambda/lambda_*.zip
+cloud-cost-insights/infra/lambda/lambda.zip
+
+# Compiled Python wheels and metadata
+*.dist-info/
+
+# Security or secrets
+*.auto.tfvars
+secrets.auto.tfvars
+
+# Lock files (optional – depends on your project policy)
+Pipfile.lock
+poetry.lock

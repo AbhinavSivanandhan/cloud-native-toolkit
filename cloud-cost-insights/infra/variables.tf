@@ -15,3 +15,7 @@ variable "lambda_memory_size" {
 variable "lambda_timeout" {
   default = 30
 }
+
+variable "sonar_api_key" {
+  description = "Perplexity Sonar API key"
+}
