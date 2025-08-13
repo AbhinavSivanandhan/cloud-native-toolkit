@@ -2,7 +2,7 @@ Instructions for **setting up the AWS IAM user**, and clear onboarding for someo
 
 ---
 
-## 🧠 Cloud Native Toolkit
+## 🧠 Cloud Native Toolkit (SoloStack)
 
 Cloud visibility & cost governance for solo builders, startups, and lean infra teams.
 Scan AWS accounts for **cost**, **security**, and **infra drift** in one click.
